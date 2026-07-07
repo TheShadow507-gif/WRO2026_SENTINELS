@@ -1,125 +1,104 @@
 #include <Servo.h>
 #include <Arduino.h>
-#include <Wire.h>
-#include <SoftwareSerial.h>
 
-// Pines del sensor ultrasónico
-const int TRIG_DERECHA   = 2;
-const int ECHO_DERECHA   = 4;
+const int TRIG_DER = 2;
+const int ECHO_DER = 4;
 
-const int TRIG_FRONTAL   = 8;
-const int ECHO_FRONTAL   = 7;
+const int TRIG_IZQ = 12;
+const int ECHO_IZQ = 13;
+2
+long duracionDer, DuracionIzq;
+float der, izq;
 
-const int TRIG_IZQUIERDA = 12;
-const int ECHO_IZQUIERDA = 13;
-
-// Pines del motor DC (con módulo L298N)
 const int ENA = 11;
-const int IN1 = 10;
-const int IN2 = 9;
+const int IN3 = 10;
+const int IN4 = 9;
 
-// Pines del servo motor
-const int SERVO_PIN = 6;
-
-int velocidad = 255;
-int velocidadRetroceso = 200; 
-int velocidadGiro = 200;
-
-// Crear objeto Servo
+const int SERVOPIN = 6;
 Servo myServo;
 
-void moveForward() { // Avanzar hacia adelante
-  myServo.write(81);  // Vuelve el servomotor a la posición inicial
-  digitalWrite(IN1, HIGH);
-  digitalWrite(IN2, LOW);
-  analogWrite(ENA, velocidad);  // Controla la velocidad del motor con el valor fijo establecido
-}
+int velRecta = 250;
+int velCurva = 250;
 
-void turnRight() { // Giro hacia la derecha 
-  myServo.write(125); // (Regular el valor de giro)
-  digitalWrite(IN1, HIGH);
-  digitalWrite(IN2, LOW);  
-  analogWrite(ENA, velocidadGiro );  // Controla la velocidad del motor con el valor fijo establecido
-}
+int anguloRecto = 90;
+int anguloIzq  = 50;
+int anguloDer  = 130;
 
-void turnLeft() { // Giro hacia la izquierda
-  myServo.write(58); // (Regular el valor de giro)
-  digitalWrite(IN1, HIGH);
-  digitalWrite(IN2, LOW); 
-  analogWrite(ENA, velocidadGiro );  // Controla la velocidad del motor con el valor fijo establecido
-}
-
-void moveBack() { // Retroceder
-  myServo.write(115); // Vuelve el servomotor a la posición inicial
-  digitalWrite(IN1, LOW);
-  digitalWrite(IN2, HIGH);
-  analogWrite(ENA, velocidadRetroceso);  // Aumenta la velocidad del motor para retroceder
-}
-
-void stop() {
-  digitalWrite(IN1, LOW);
-  digitalWrite(IN2, LOW);
-  analogWrite(ENA, 0);  // Detiene el motor
-}
+float UMBRAL_GIRO = 39;
+float MARGEN_DIFERENCIA = 15;
 
 void setup() {
-  // Inicializar la comunicación serie
-  Serial.begin(9600);
+  Serial.begin (9600);
 
-  // Configurar los pines del sensor ultrasónico
-  pinMode(TRIG_DERECHA, OUTPUT);
-  pinMode(ECHO_DERECHA, INPUT);
+  pinMode(TRIG_DER, OUTPUT);
+  pinMode(ECHO_DER, INPUT);
 
-  pinMode(TRIG_FRONTAL, OUTPUT);
-  pinMode(ECHO_FRONTAL, INPUT);
+  pinMode(TRIG_IZQ, OUTPUT);
+  pinMode(ECHO_IZQ, INPUT);
 
-  pinMode(TRIG_IZQUIERDA, OUTPUT);
-  pinMode(ECHO_IZQUIERDA, INPUT);
-
-  // Configurar los pines del motor DC
   pinMode(ENA, OUTPUT);
-  pinMode(IN1, OUTPUT);
-  pinMode(IN2, OUTPUT);
+  pinMode(IN3, OUTPUT);
+  pinMode(IN4, OUTPUT);
 
-  // Inicializar el servo motor
-  myServo.attach(SERVO_PIN);
+  myServo.attach(SERVOPIN);
+  myServo.write(anguloRecto);
 
-  // Poner el servo motor en la posición central (90 grados)
-  myServo.write(90);
-  moveForward(); // inicia el movimiento hacia adelante 
+  digitalWrite(IN3, LOW);
+  digitalWrite(IN4, HIGH);
+  analogWrite(ENA, velRecta);
 }
 
+float leerDistancia(int trigPin, int echoPin) {
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+
+  long duracion = pulseIn(echoPin, HIGH, 25000);
+  if (duracion == 0) return 0;
+  return duracion * 0.034 / 2;
+}
+
+void irRecto() {
+  myServo.write(anguloRecto);
+  analogWrite(ENA, velCurva);
+}
+
+void girarIzquierda() {
+  myServo.write(anguloIzq);
+  analogWrite(ENA, velCurva);
+}
+
+void girarDerecha() {
+  myServo.write(anguloDer);
+  analogWrite(ENA, velCurva);
+}
+
+
 void loop() {
-  // Enviar pulso de disparo
-  digitalWrite(TRIG_PIN, LOW);
-  //delayMicroseconds(2);
-  digitalWrite(TRIG_PIN, HIGH);
-  //delayMicroseconds(10);
-  digitalWrite(TRIG_PIN, LOW);
+  der = leerDistancia(TRIG_DER, ECHO_DER);
+  izq = leerDistancia(TRIG_IZQ, ECHO_IZQ);
 
-  // Medir el tiempo del eco
-  long duration = pulseIn(ECHO_PIN, HIGH);
+  Serial.print("Der: "); Serial.print(der);
+  Serial.print(" cm | izq: "); Serial.print(izq);
+  Serial.println(" cm ");
 
-  // Calcular la distancia en centímetros
-  float distance = duration * 0.034 / 2;
- 
-  // Imprimir la distancia en el monitor serial
-  Serial.print("Distancia: ");
-  Serial.print(distance);
-  Serial.println(" cm");
+  float diferencia = izq - der;
 
-  if (distance < 15) { // si la distancia delantera es menor a 35cm 
-    stop();
-    delay(1000); // Espera 1 segundos
-    moveBack();
-    delay(1300); // Retrocede por 1.3 segundos
-    stop(); // Detiene después de retroceder
-    delay(500);
-  } else if (distance <= 50 ) {  // Si solo el sensor delantero detecta un obstáculo a 45 cm o menos
-    turnLeft();
-  } else {  // Si no hay obstáculo
-    moveForward();
-  } 
-  // Esperar 100 ms antes de la siguiente medición
-  delay(100);
+  bool izqDisparaGiro = (izq > UMBRAL_GIRO) && (diferencia > MARGEN_DIFERENCIA);
+  bool derDisparaGiro = (der > UMBRAL_GIRO) && (-diferencia > MARGEN_DIFERENCIA);
+
+  if (izqDisparaGiro && !derDisparaGiro) {
+    girarIzquierda();
+    delay(100);
+  }
+  else if (derDisparaGiro && !izqDisparaGiro) {
+    girarDerecha();
+    delay(100);
+  }
+  else {
+    irRecto();
+  }
+  delay(30);
 }
