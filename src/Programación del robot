@@ -7,7 +7,6 @@ const int ECHO_DER = 4;
 const int TRIG_IZQ = 12;
 const int ECHO_IZQ = 13;
 
-long duracionDer, DuracionIzq;
 float der, izq;
 
 const int ENA = 11;
@@ -26,6 +25,18 @@ int anguloDer  = 130;
 
 float UMBRAL_GIRO = 35;
 float MARGEN_DIFERENCIA = 15;
+
+// ---- Conteo de vueltas ----
+const int GIROS_POR_VUELTA = 4;   // AJUSTA esto según las esquinas reales de tu pista
+const int VUELTAS_OBJETIVO = 3;
+const int GIROS_OBJETIVO = GIROS_POR_VUELTA * VUELTAS_OBJETIVO;
+
+enum Estado { RECTO, IZQUIERDA, DERECHA };
+Estado estadoActual = RECTO;
+Estado estadoAnterior = RECTO;
+
+int contadorGiros = 0;
+bool detenido = false;
 
 void setup() {
   Serial.begin(9600);
@@ -48,6 +59,7 @@ void setup() {
   analogWrite(ENA, velRecta);
 }
 
+// Lee una sola vez el sensor
 float leerDistancia(int trigPin, int echoPin) {
   digitalWrite(trigPin, LOW);
   delayMicroseconds(2);
@@ -57,7 +69,24 @@ float leerDistancia(int trigPin, int echoPin) {
 
   long duracion = pulseIn(echoPin, HIGH, 25000);
   if (duracion == 0) return 0;
-  return duracion * 0.034 / 2;
+
+  float distancia = duracion * 0.034 / 2;
+  if (distancia < 3) return 0;  // descarta lecturas imposibles/ruido
+  return distancia;
+}
+
+// Toma 3 lecturas y devuelve la mediana (mucho más estable que una sola lectura)
+float leerDistanciaFiltrada(int trigPin, int echoPin) {
+  float m1 = leerDistancia(trigPin, echoPin);
+  delay(10);
+  float m2 = leerDistancia(trigPin, echoPin);
+  delay(10);
+  float m3 = leerDistancia(trigPin, echoPin);
+
+  if (m1 > m2) { float t = m1; m1 = m2; m2 = t; }
+  if (m2 > m3) { float t = m2; m2 = m3; m3 = t; }
+  if (m1 > m2) { float t = m1; m1 = m2; m2 = t; }
+  return m2;
 }
 
 void irRecto() {
@@ -75,15 +104,28 @@ void girarDerecha() {
   analogWrite(ENA, velCurva);
 }
 
+// Apaga TODO: motor y servo. El robot queda inmóvil de forma permanente.
+void detenerTodo() {
+  analogWrite(ENA, 0);
+  digitalWrite(IN3, LOW);
+  digitalWrite(IN4, LOW);
+  myServo.write(anguloRecto);
+  detenido = true;
+  Serial.println("=== CIRCUITO COMPLETADO: ROBOT DETENIDO ===");
+}
+
 void loop() {
-  der = leerDistancia(TRIG_DER, ECHO_DER);
-  delay(50);   // <-- da tiempo a que el eco del sensor derecho se disipe
-  izq = leerDistancia(TRIG_IZQ, ECHO_IZQ);
-  delay(50);   // <-- da tiempo a que el eco del sensor izquierdo se disipe
+  if (detenido) return;   // ya terminó, no hace nada más
+
+  der = leerDistanciaFiltrada(TRIG_DER, ECHO_DER);
+  delay(30);
+  izq = leerDistanciaFiltrada(TRIG_IZQ, ECHO_IZQ);
+  delay(30);
 
   Serial.print("Der: "); Serial.print(der);
-  Serial.print(" cm | izq: "); Serial.print(izq);
-  Serial.println(" cm ");
+  Serial.print(" cm | Izq: "); Serial.print(izq);
+  Serial.print(" cm | Giros: "); Serial.print(contadorGiros);
+  Serial.print("/"); Serial.println(GIROS_OBJETIVO);
 
   float diferencia = izq - der;
 
@@ -91,13 +133,33 @@ void loop() {
   bool derDisparaGiro = (der > UMBRAL_GIRO) && (-diferencia > MARGEN_DIFERENCIA);
 
   if (izqDisparaGiro && !derDisparaGiro) {
-    girarIzquierda();
+    estadoActual = IZQUIERDA;
   }
   else if (derDisparaGiro && !izqDisparaGiro) {
-    girarDerecha();
+    estadoActual = DERECHA;
   }
   else {
+    estadoActual = RECTO;
+  }
+
+  // Cuenta un giro solo en el instante en que EMPIEZA (transición desde RECTO)
+  if (estadoAnterior == RECTO && (estadoActual == IZQUIERDA || estadoActual == DERECHA)) {
+    contadorGiros++;
+
+    if (contadorGiros >= GIROS_OBJETIVO) {
+      detenerTodo();
+      return;
+    }
+  }
+  estadoAnterior = estadoActual;
+
+  if (estadoActual == IZQUIERDA) {
+    girarIzquierda();
+  } else if (estadoActual == DERECHA) {
+    girarDerecha();
+  } else {
     irRecto();
   }
+
   delay(100);
 }
