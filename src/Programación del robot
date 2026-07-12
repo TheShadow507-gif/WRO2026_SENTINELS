@@ -16,27 +16,38 @@ const int IN4 = 9;
 const int SERVOPIN = 6;
 Servo myServo;
 
-int velRecta = 210;
-int velCurva = 210;
+// ============================================================
+// ZONA DE CONFIGURACIÓN — aquí se ajustan velocidad y ángulos.
+// Todo lo de abajo de esta zona es lógica, no tocar.
+// ============================================================
 
-int anguloRecto = 90;
-int anguloIzq  = 50;
-int anguloDer  = 130;
+// --- VELOCIDAD (PWM 0-255) ---
+int velRecta = 170; // velocidad al ir recto //eran 210 al inicio
+int velCurva = 170; // velocidad al girar (izq o der)
 
-float UMBRAL_GIRO = 35;
-float MARGEN_DIFERENCIA = 15;
+// --- ÁNGULOS DEL SERVO (grados) ---
+int anguloRecto = 90; // recto SIEMPRE debe ser 90. Si el servo no queda
+                      // centrado físicamente en 90, es un problema
+                      // mecánico del servo/cuerno, no de este código.
+int anguloIzq  = 50;  // ángulo al girar izquierda
+int anguloDer  = 130; // ángulo al girar derecha
 
-// ---- Conteo de vueltas ----
-const int GIROS_POR_VUELTA = 4;   // AJUSTA esto según las esquinas reales de tu pista
-const int VUELTAS_OBJETIVO = 3;
-const int GIROS_OBJETIVO = GIROS_POR_VUELTA * VUELTAS_OBJETIVO;
+// --- UMBRAL DE DISTANCIA (cm) ---
+float UMBRAL_GIRO = 55; // si un lado ve más de esto, se considera "abierto" y gira hacia allá
 
-enum Estado { RECTO, IZQUIERDA, DERECHA };
-Estado estadoActual = RECTO;
-Estado estadoAnterior = RECTO;
+// --- CONTADOR DE VUELTAS ---
+int GIROS_POR_VUELTA = 4; // 1 vuelta = 4 giros (ajusta según tu pista)
+int VUELTAS_META     = 3; // detenerse tras esta cantidad de vueltas
 
-int contadorGiros = 0;
-bool detenido = false;
+// ============================================================
+// FIN ZONA DE CONFIGURACIÓN
+// ============================================================
+
+int contadorGiros = 0; // cuenta cada giro detectado (no tocar, es lógica)
+int girosMeta = GIROS_POR_VUELTA * VUELTAS_META; // se calcula solo (no tocar)
+
+bool girandoAntes = false; // ¿en el ciclo anterior estaba girando?
+bool detenido = false;     // true cuando ya cumplió la meta
 
 void setup() {
   Serial.begin(9600);
@@ -59,7 +70,6 @@ void setup() {
   analogWrite(ENA, velRecta);
 }
 
-// Lee una sola vez el sensor
 float leerDistancia(int trigPin, int echoPin) {
   digitalWrite(trigPin, LOW);
   delayMicroseconds(2);
@@ -68,29 +78,13 @@ float leerDistancia(int trigPin, int echoPin) {
   digitalWrite(trigPin, LOW);
 
   long duracion = pulseIn(echoPin, HIGH, 25000);
-  if (duracion == 0) return 0;
-
-  float distancia = duracion * 0.034 / 2;
-  if (distancia < 3) return 0;  // descarta lecturas imposibles/ruido
-  return distancia;
-}
-
-// Toma 3 lecturas y devuelve la mediana (mucho más estable que una sola lectura)
-float leerDistanciaFiltrada(int trigPin, int echoPin) {
-  float m1 = leerDistancia(trigPin, echoPin);
-  delay(10);
-  float m2 = leerDistancia(trigPin, echoPin);
-  delay(10);
-  float m3 = leerDistancia(trigPin, echoPin);
-
-  if (m1 > m2) { float t = m1; m1 = m2; m2 = t; }
-  if (m2 > m3) { float t = m2; m2 = m3; m3 = t; }
-  if (m1 > m2) { float t = m1; m1 = m2; m2 = t; }
-  return m2;
+  if (duracion == 0) return 400.0; // sin eco = vía libre, no obstáculo
+  return duracion * 0.034 / 2;
 }
 
 void irRecto() {
-  myServo.write(anguloRecto);
+  myServo.write(anguloRecto); // SIEMPRE 90°. Si el servo no va recto aquí,
+                              // el problema es el servo, no la lógica de giro.
   analogWrite(ENA, velRecta);
 }
 
@@ -104,62 +98,64 @@ void girarDerecha() {
   analogWrite(ENA, velCurva);
 }
 
-// Apaga TODO: motor y servo. El robot queda inmóvil de forma permanente.
-void detenerTodo() {
-  analogWrite(ENA, 0);
+void detenerRobot() {
+  myServo.write(anguloRecto);
   digitalWrite(IN3, LOW);
   digitalWrite(IN4, LOW);
-  myServo.write(anguloRecto);
-  detenido = true;
-  Serial.println("=== CIRCUITO COMPLETADO: ROBOT DETENIDO ===");
+  analogWrite(ENA, 0);
 }
 
 void loop() {
-  if (detenido) return;   // ya terminó, no hace nada más
+  if (detenido) {
+    detenerRobot();
+    return; // ya completó las 3 vueltas, no hace nada más
+  }
 
-  der = leerDistanciaFiltrada(TRIG_DER, ECHO_DER);
-  delay(30);
-  izq = leerDistanciaFiltrada(TRIG_IZQ, ECHO_IZQ);
-  delay(30);
+  der = leerDistancia(TRIG_DER, ECHO_DER);
+  //delay(50);
+  izq = leerDistancia(TRIG_IZQ, ECHO_IZQ);
+  //delay(50);
 
   Serial.print("Der: "); Serial.print(der);
   Serial.print(" cm | Izq: "); Serial.print(izq);
-  Serial.print(" cm | Giros: "); Serial.print(contadorGiros);
-  Serial.print("/"); Serial.println(GIROS_OBJETIVO);
+  Serial.println(" cm");
 
-  float diferencia = izq - der;
+  // El sentido de giro depende ÚNICAMENTE de estas lecturas de los
+  // ultrasónicos (der, izq). El servo solo ejecuta lo que aquí se decide.
+  bool abrioDer = der > UMBRAL_GIRO;
+  bool abrioIzq = izq > UMBRAL_GIRO;
+  bool girandoAhora;
 
-  bool izqDisparaGiro = (izq > UMBRAL_GIRO) && (diferencia > MARGEN_DIFERENCIA);
-  bool derDisparaGiro = (der > UMBRAL_GIRO) && (-diferencia > MARGEN_DIFERENCIA);
-
-  if (izqDisparaGiro && !derDisparaGiro) {
-    estadoActual = IZQUIERDA;
+  if (abrioDer && !abrioIzq) {
+    girarDerecha();
+    girandoAhora = true;
   }
-  else if (derDisparaGiro && !izqDisparaGiro) {
-    estadoActual = DERECHA;
+  else if (abrioIzq && !abrioDer) {
+    girarIzquierda();
+    girandoAhora = true;
+  }
+  else if (abrioDer && abrioIzq) {
+    // ambos lados abiertos: gira hacia el que esté más despejado
+    if (der > izq) girarDerecha(); else girarIzquierda();
+    girandoAhora = true;
   }
   else {
-    estadoActual = RECTO;
+    irRecto();
+    girandoAhora = false;
   }
 
-  // Cuenta un giro solo en el instante en que EMPIEZA (transición desde RECTO)
-  if (estadoAnterior == RECTO && (estadoActual == IZQUIERDA || estadoActual == DERECHA)) {
+  // --- contador de giros / vueltas ---
+  if (girandoAhora && !girandoAntes) { // solo cuenta al ENTRAR a un giro, no en cada ciclo
     contadorGiros++;
+    Serial.print("Giro detectado. Total: ");
+    delay(250);
+    Serial.println(contadorGiros);
 
-    if (contadorGiros >= GIROS_OBJETIVO) {
-      detenerTodo();
-      return;
+    if (contadorGiros >= girosMeta) {
+      detenido = true;
     }
   }
-  estadoAnterior = estadoActual;
-
-  if (estadoActual == IZQUIERDA) {
-    girarIzquierda();
-  } else if (estadoActual == DERECHA) {
-    girarDerecha();
-  } else {
-    irRecto();
-  }
+  girandoAntes = girandoAhora;
 
   delay(100);
 }
