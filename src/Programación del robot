@@ -1,53 +1,38 @@
 #include <Servo.h>
-#include <Arduino.h>
+#include <Arduino.h> //librerias
 
 const int TRIG_DER = 2;
-const int ECHO_DER = 4;
+const int ECHO_DER = 4; //pines de los sensores
 
 const int TRIG_IZQ = 12;
 const int ECHO_IZQ = 13;
 
-float der, izq;
+float der, izq;  //Sentido
 
 const int ENA = 11;
 const int IN3 = 10;
-const int IN4 = 9;
+const int IN4 = 9; //Pines del controlador
 
-const int SERVOPIN = 6;
+const int SERVOPIN = 6; //servo pin
 Servo myServo;
 
-// ============================================================
-// ZONA DE CONFIGURACIÓN — aquí se ajustan velocidad y ángulos.
-// Todo lo de abajo de esta zona es lógica, no tocar.
-// ============================================================
+int velRecta = 170; //velocidades
+int velCurva = 170;
 
-// --- VELOCIDAD (PWM 0-255) ---
-int velRecta = 170; // velocidad al ir recto //eran 210 al inicio
-int velCurva = 170; // velocidad al girar (izq o der)
+int anguloRecto = 90; //direcciones
+int anguloIzq = 50;
+int anguloDer = 130;
 
-// --- ÁNGULOS DEL SERVO (grados) ---
-int anguloRecto = 90; // recto SIEMPRE debe ser 90. Si el servo no queda
-                      // centrado físicamente en 90, es un problema
-                      // mecánico del servo/cuerno, no de este código.
-int anguloIzq  = 50;  // ángulo al girar izquierda
-int anguloDer  = 130; // ángulo al girar derecha
+float UMBRAL_GIRO = 55; //distabncia
 
-// --- UMBRAL DE DISTANCIA (cm) ---
-float UMBRAL_GIRO = 55; // si un lado ve más de esto, se considera "abierto" y gira hacia allá
+int GIROS_POR_VUELTA = 4; 
+int VUELTAS_META = 3;
 
-// --- CONTADOR DE VUELTAS ---
-int GIROS_POR_VUELTA = 4; // 1 vuelta = 4 giros (ajusta según tu pista)
-int VUELTAS_META     = 3; // detenerse tras esta cantidad de vueltas
+int contadorGiros = 0;  //contador de giros
+int girosMeta = GIROS_POR_VUELTA * VUELTAS_META;
 
-// ============================================================
-// FIN ZONA DE CONFIGURACIÓN
-// ============================================================
-
-int contadorGiros = 0; // cuenta cada giro detectado (no tocar, es lógica)
-int girosMeta = GIROS_POR_VUELTA * VUELTAS_META; // se calcula solo (no tocar)
-
-bool girandoAntes = false; // ¿en el ciclo anterior estaba girando?
-bool detenido = false;     // true cuando ya cumplió la meta
+bool girandoAntes = false;
+bool detenido = false;
 
 void setup() {
   Serial.begin(9600);
@@ -78,13 +63,15 @@ float leerDistancia(int trigPin, int echoPin) {
   digitalWrite(trigPin, LOW);
 
   long duracion = pulseIn(echoPin, HIGH, 25000);
-  if (duracion == 0) return 400.0; // sin eco = vía libre, no obstáculo
+
+  if (duracion == 0)
+    return 400.0;
+
   return duracion * 0.034 / 2;
 }
 
 void irRecto() {
-  myServo.write(anguloRecto); // SIEMPRE 90°. Si el servo no va recto aquí,
-                              // el problema es el servo, no la lógica de giro.
+  myServo.write(anguloRecto);
   analogWrite(ENA, velRecta);
 }
 
@@ -108,7 +95,7 @@ void detenerRobot() {
 void loop() {
   if (detenido) {
     detenerRobot();
-    return; // ya completó las 3 vueltas, no hace nada más
+    return;
   }
 
   der = leerDistancia(TRIG_DER, ECHO_DER);
@@ -116,12 +103,12 @@ void loop() {
   izq = leerDistancia(TRIG_IZQ, ECHO_IZQ);
   //delay(50);
 
-  Serial.print("Der: "); Serial.print(der);
-  Serial.print(" cm | Izq: "); Serial.print(izq);
+  Serial.print("Der: ");
+  Serial.print(der);
+  Serial.print(" cm | Izq: ");
+  Serial.print(izq);
   Serial.println(" cm");
 
-  // El sentido de giro depende ÚNICAMENTE de estas lecturas de los
-  // ultrasónicos (der, izq). El servo solo ejecuta lo que aquí se decide.
   bool abrioDer = der > UMBRAL_GIRO;
   bool abrioIzq = izq > UMBRAL_GIRO;
   bool girandoAhora;
@@ -135,8 +122,11 @@ void loop() {
     girandoAhora = true;
   }
   else if (abrioDer && abrioIzq) {
-    // ambos lados abiertos: gira hacia el que esté más despejado
-    if (der > izq) girarDerecha(); else girarIzquierda();
+    if (der > izq)
+      girarDerecha();
+    else
+      girarIzquierda();
+
     girandoAhora = true;
   }
   else {
@@ -144,9 +134,9 @@ void loop() {
     girandoAhora = false;
   }
 
-  // --- contador de giros / vueltas ---
-  if (girandoAhora && !girandoAntes) { // solo cuenta al ENTRAR a un giro, no en cada ciclo
+  if (girandoAhora && !girandoAntes) { //contador de los giros
     contadorGiros++;
+
     Serial.print("Giro detectado. Total: ");
     delay(250);
     Serial.println(contadorGiros);
@@ -155,6 +145,7 @@ void loop() {
       detenido = true;
     }
   }
+
   girandoAntes = girandoAhora;
 
   delay(100);
