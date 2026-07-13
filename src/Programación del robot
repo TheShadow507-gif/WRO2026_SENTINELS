@@ -1,3 +1,4 @@
+
 #include <Servo.h>
 #include <Arduino.h> //librerias
 
@@ -16,8 +17,8 @@ const int IN4 = 9; //Pines del controlador
 const int SERVOPIN = 6; //servo pin
 Servo myServo;
 
-int velRecta = 170; //velocidades
-int velCurva = 170;
+int velRecta = 200; //velocidades 190
+int velCurva = 200;
 
 int anguloRecto = 90; //direcciones
 int anguloIzq = 50;
@@ -25,7 +26,7 @@ int anguloDer = 130;
 
 float UMBRAL_GIRO = 55; //distabncia
 
-int GIROS_POR_VUELTA = 4; 
+int GIROS_POR_VUELTA = 4;
 int VUELTAS_META = 3;
 
 int contadorGiros = 0;  //contador de giros
@@ -33,6 +34,9 @@ int girosMeta = GIROS_POR_VUELTA * VUELTAS_META;
 
 bool girandoAntes = false;
 bool detenido = false;
+
+bool sentidoDefinido = false; // true una vez que ya sabemos hacia dónde gira la pista
+bool sentidoHorario  = true;  // true = horario (usa sensor derecho), false = antihorario (usa sensor izquierdo)
 
 void setup() {
   Serial.begin(9600);
@@ -113,23 +117,49 @@ void loop() {
   bool abrioIzq = izq > UMBRAL_GIRO;
   bool girandoAhora;
 
-  if (abrioDer && !abrioIzq) {
-    girarDerecha();
-    girandoAhora = true;
-  }
-  else if (abrioIzq && !abrioDer) {
-    girarIzquierda();
-    girandoAhora = true;
-  }
-  else if (abrioDer && abrioIzq) {
-    if (der > izq)
-      girarDerecha();
-    else
-      girarIzquierda();
 
-    girandoAhora = true;
+  if (!sentidoDefinido) {
+    if (abrioDer && !abrioIzq) {
+      sentidoDefinido = true;
+      sentidoHorario = true; // se abrió a la derecha -> pista en sentido horario
+      Serial.println(">> Sentido de pista definido: HORARIO");
+    }
+    else if (abrioIzq && !abrioDer) {
+      sentidoDefinido = true;
+      sentidoHorario = false; // se abrió a la izquierda -> pista antihoraria
+      Serial.println(">> Sentido de pista definido: ANTIHORARIO");
+    }
+    else if (abrioDer && abrioIzq) {
+      // si se abren los dos a la vez, se decide por el que esté más despejado
+      sentidoDefinido = true;
+      sentidoHorario = (der > izq);
+      Serial.print(">> Sentido de pista definido (ambos abiertos): ");
+      Serial.println(sentidoHorario ? "HORARIO" : "ANTIHORARIO");
+    }
+  }
+
+
+  if (sentidoDefinido) {
+    if (sentidoHorario) {
+      if (abrioDer) {
+        girarDerecha();
+        girandoAhora = true;
+      } else {
+        irRecto();
+        girandoAhora = false;
+      }
+    } else {
+      if (abrioIzq) {
+        girarIzquierda();
+        girandoAhora = true;
+      } else {
+        irRecto();
+        girandoAhora = false;
+      }
+    }
   }
   else {
+    
     irRecto();
     girandoAhora = false;
   }
