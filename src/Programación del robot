@@ -1,5 +1,5 @@
-
 #include <Servo.h>
+#include <HUSKYLENS.h>
 #include <Arduino.h> //librerias
 
 const int TRIG_DER = 2;
@@ -17,8 +17,8 @@ const int IN4 = 9; //Pines del controlador
 const int SERVOPIN = 6; //servo pin
 Servo myServo;
 
-int velRecta = 200; //velocidades 190
-int velCurva = 200;
+int velRecta = 220; //velocidades 220
+int velCurva = 220;
 
 int anguloRecto = 90; //direcciones
 int anguloIzq = 50;
@@ -37,6 +37,13 @@ bool detenido = false;
 
 bool sentidoDefinido = false; // true una vez que ya sabemos hacia dónde gira la pista
 bool sentidoHorario  = true;  // true = horario (usa sensor derecho), false = antihorario (usa sensor izquierdo)
+
+// --- NUEVO: el primer giro que se detecta al arrancar no cuenta ---
+// Es solo el ajuste inicial de posición (el robot empieza cerca de la
+// primera esquina), no un giro real de una vuelta completa. Si se
+// cuenta, al final falta exactamente ese giro para terminar el
+// recorrido y cerrar bien hasta la meta/punto de partida.
+bool primerGiroIgnorado = false;
 
 void setup() {
   Serial.begin(9600);
@@ -138,41 +145,44 @@ void loop() {
     }
   }
 
+  if (abrioDer && !abrioIzq) {
+    girarDerecha();
+    girandoAhora = true;
+  }
+  else if (abrioIzq && !abrioDer) {
+    girarIzquierda();
+    girandoAhora = true;
+  }
+  else if (abrioDer && abrioIzq) {
+    if (der > izq)
+      girarDerecha();
+    else
+      girarIzquierda();
 
-  if (sentidoDefinido) {
-    if (sentidoHorario) {
-      if (abrioDer) {
-        girarDerecha();
-        girandoAhora = true;
-      } else {
-        irRecto();
-        girandoAhora = false;
-      }
-    } else {
-      if (abrioIzq) {
-        girarIzquierda();
-        girandoAhora = true;
-      } else {
-        irRecto();
-        girandoAhora = false;
-      }
-    }
+    girandoAhora = true;
   }
   else {
-    
     irRecto();
     girandoAhora = false;
   }
 
+
+
   if (girandoAhora && !girandoAntes) { //contador de los giros
-    contadorGiros++;
+    if (!primerGiroIgnorado) {
+      // este es el giro de arranque: se ejecuta, pero no cuenta
+      primerGiroIgnorado = true;
+      Serial.println("Giro de arranque (no cuenta para el total)");
+    }
+    else {
+      contadorGiros++;
 
-    Serial.print("Giro detectado. Total: ");
-    delay(250);
-    Serial.println(contadorGiros);
+      Serial.print("Giro detectado. Total: ");
+      Serial.println(contadorGiros);
 
-    if (contadorGiros >= girosMeta) {
-      detenido = true;
+      if (contadorGiros >= girosMeta) {
+        detenido = true;
+      }
     }
   }
 
