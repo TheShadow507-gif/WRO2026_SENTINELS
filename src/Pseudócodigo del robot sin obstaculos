@@ -1,0 +1,121 @@
+Inicio
+
+```
+Definir der, izq Como Real
+Definir duracion Como Entero
+
+Definir velRecta Como Entero
+Definir velCurva Como Entero
+
+Definir anguloRecto Como Entero
+Definir anguloIzq Como Entero
+Definir anguloDer Como Entero
+
+Definir umbralGiro Como Real
+
+Definir girosPorVuelta Como Entero
+Definir vueltasMeta Como Entero
+Definir contadorGiros Como Entero
+Definir girosMeta Como Entero
+
+Definir girandoAntes Como Logico
+Definir girandoAhora Como Logico
+Definir detenido Como Logico
+Definir primerGiroIgnorado Como Logico
+
+
+velRecta ← 220
+velCurva ← 220
+
+anguloRecto ← 90
+anguloIzq ← 50
+anguloDer ← 130
+
+umbralGiro ← 55
+
+girosPorVuelta ← 4
+vueltasMeta ← 3
+
+contadorGiros ← 0
+girosMeta ← girosPorVuelta * vueltasMeta
+
+girandoAntes ← Falso
+detenido ← Falso
+primerGiroIgnorado ← Falso
+
+
+Configurar sensor derecho
+Configurar sensor izquierdo
+Configurar motor
+Configurar servo
+
+Mover servo a anguloRecto
+Encender motor
+Avanzar hacia adelante
+
+
+Mientras detenido = Falso Hacer
+
+    der ← LeerDistancia(sensorDerecho)
+    izq ← LeerDistancia(sensorIzquierdo)
+
+    Mostrar "Der: ", der, " cm"
+    Mostrar "Izq: ", izq, " cm"
+
+
+    Si der > umbralGiro Y izq <= umbralGiro Entonces
+
+        Mover servo a anguloDer
+        Velocidad del motor ← velCurva
+        girandoAhora ← Verdadero
+
+    Sino Si izq > umbralGiro Y der <= umbralGiro Entonces
+
+        Mover servo a anguloIzq
+        Velocidad del motor ← velCurva
+        girandoAhora ← Verdadero
+
+    Sino
+
+        Mover servo a anguloRecto
+        Velocidad del motor ← velRecta
+        girandoAhora ← Falso
+
+    FinSi
+
+
+    Si girandoAhora = Verdadero Y girandoAntes = Falso Entonces
+
+        Si primerGiroIgnorado = Falso Entonces
+
+            primerGiroIgnorado ← Verdadero
+            Mostrar "Giro de arranque, no cuenta"
+
+        Sino
+
+            contadorGiros ← contadorGiros + 1
+
+            Mostrar "Giro detectado. Total: ", contadorGiros
+
+            Si contadorGiros >= girosMeta Entonces
+                detenido ← Verdadero
+            FinSi
+
+        FinSi
+
+    FinSi
+
+
+    girandoAntes ← girandoAhora
+
+    Esperar 100 milisegundos
+
+FinMientras
+
+
+Mover servo a anguloRecto
+Detener motor
+Velocidad del motor ← 0
+```
+
+Fin
