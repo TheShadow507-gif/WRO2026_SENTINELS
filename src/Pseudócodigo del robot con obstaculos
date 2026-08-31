@@ -1,0 +1,173 @@
+Inicio
+
+```
+Definir TRIG_DER Como Entero
+Definir ECHO_DER Como Entero
+Definir TRIG_IZQ Como Entero
+Definir ECHO_IZQ Como Entero
+
+TRIG_DER ← 2
+ECHO_DER ← 4
+TRIG_IZQ ← 12
+ECHO_IZQ ← 13
+
+Definir der, izq Como Real
+
+Definir ENA, IN3, IN4 Como Entero
+ENA ← 11
+IN3 ← 10
+IN4 ← 9
+
+Definir SERVOPIN Como Entero
+SERVOPIN ← 6
+
+Definir velRecta, velCurva Como Entero
+velRecta ← 220
+velCurva ← 220
+
+Definir anguloRecto, anguloIzq, anguloDer Como Entero
+anguloRecto ← 90
+anguloIzq ← 50
+anguloDer ← 130
+
+Definir UMBRAL_GIRO Como Real
+UMBRAL_GIRO ← 55
+
+Definir GIROS_POR_VUELTA, VUELTAS_META Como Entero
+GIROS_POR_VUELTA ← 4
+VUELTAS_META ← 3
+
+contadorGiros ← 0
+girosMeta ← GIROS_POR_VUELTA * VUELTAS_META
+
+girandoAntes ← Falso
+detenido ← Falso
+primerGiroIgnorado ← Falso
+
+giroPorColor ← Falso
+inicioGiroColor ← 0
+TIEMPO_MAX_GIRO ← 1200
+
+COLOR_ROJO ← 1
+COLOR_VERDE ← 2
+
+
+Configurar sensores
+Configurar motor
+Configurar servo
+Iniciar HuskyLens
+
+Mover servo a anguloRecto
+Encender motor
+
+
+Mientras detenido = Falso Hacer
+
+    colorDetectado ← DetectarColor()
+
+
+    Si giroPorColor = Falso Entonces
+
+        Si colorDetectado = COLOR_ROJO Entonces
+
+            GirarDerecha()
+            giroPorColor ← Verdadero
+            inicioGiroColor ← TiempoActual()
+
+        Sino Si colorDetectado = COLOR_VERDE Entonces
+
+            GirarIzquierda()
+            giroPorColor ← Verdadero
+            inicioGiroColor ← TiempoActual()
+
+        FinSi
+
+    FinSi
+
+
+    Si giroPorColor = Verdadero Entonces
+
+        Si colorDetectado = 0 Entonces
+
+            giroPorColor ← Falso
+            IrRecto()
+
+        Sino Si TiempoActual() - inicioGiroColor >= TIEMPO_MAX_GIRO Entonces
+
+            giroPorColor ← Falso
+            IrRecto()
+
+        Sino
+
+            Si colorDetectado = COLOR_ROJO Entonces
+                GirarDerecha()
+
+            Sino Si colorDetectado = COLOR_VERDE Entonces
+                GirarIzquierda()
+
+            FinSi
+
+        FinSi
+
+        Esperar 50 milisegundos
+
+    Sino
+
+        der ← LeerDistancia(TRIG_DER, ECHO_DER)
+        izq ← LeerDistancia(TRIG_IZQ, ECHO_IZQ)
+
+        abrioDer ← der > UMBRAL_GIRO
+        abrioIzq ← izq > UMBRAL_GIRO
+
+        girandoAhora ← Falso
+
+
+        Si abrioDer Y NO abrioIzq Entonces
+
+            GirarDerecha()
+            girandoAhora ← Verdadero
+
+        Sino Si abrioIzq Y NO abrioDer Entonces
+
+            GirarIzquierda()
+            girandoAhora ← Verdadero
+
+        Sino
+
+            IrRecto()
+            girandoAhora ← Falso
+
+        FinSi
+
+
+        Si girandoAhora Y NO girandoAntes Entonces
+
+            Si primerGiroIgnorado = Falso Entonces
+
+                primerGiroIgnorado ← Verdadero
+
+            Sino
+
+                contadorGiros ← contadorGiros + 1
+
+                Si contadorGiros >= girosMeta Entonces
+                    detenido ← Verdadero
+                FinSi
+
+            FinSi
+
+        FinSi
+
+        girandoAntes ← girandoAhora
+
+        Esperar 100 milisegundos
+
+    FinSi
+
+FinMientras
+
+
+DetenerRobot()
+```
+
+Fin
