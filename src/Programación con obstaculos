@@ -1,0 +1,239 @@
+#include <Servo.h>
+#include <Arduino.h>
+#include <Wire.h>
+#include <HUSKYLENS.h>
+
+const int TRIG_DER = 2;
+const int ECHO_DER = 4;
+
+const int TRIG_IZQ = 12;
+const int ECHO_IZQ = 13;
+
+float der, izq;
+
+const int ENA = 11;
+const int IN3 = 10;
+const int IN4 = 9;
+
+const int SERVOPIN = 6;
+Servo myServo;
+
+HUSKYLENS huskylens;
+
+int velRecta = 220;
+int velCurva = 220;
+
+int anguloRecto = 90;
+int anguloIzq = 50;
+int anguloDer = 130;
+
+float UMBRAL_GIRO = 55;
+
+int GIROS_POR_VUELTA = 4;
+int VUELTAS_META = 3;
+
+int contadorGiros = 0;
+int girosMeta = GIROS_POR_VUELTA * VUELTAS_META;
+
+bool girandoAntes = false;
+bool detenido = false;
+
+bool primerGiroIgnorado = false;
+
+bool giroPorColor = false;
+unsigned long inicioGiroColor = 0;
+
+const unsigned long TIEMPO_MAX_GIRO = 1200;
+
+const int COLOR_ROJO = 1;
+const int COLOR_VERDE = 2;
+
+void setup() {
+  Serial.begin(9600);
+
+  pinMode(TRIG_DER, OUTPUT);
+  pinMode(ECHO_DER, INPUT);
+
+  pinMode(TRIG_IZQ, OUTPUT);
+  pinMode(ECHO_IZQ, INPUT);
+
+  pinMode(ENA, OUTPUT);
+  pinMode(IN3, OUTPUT);
+  pinMode(IN4, OUTPUT);
+
+  myServo.attach(SERVOPIN);
+  myServo.write(anguloRecto);
+
+  digitalWrite(IN3, LOW);
+  digitalWrite(IN4, HIGH);
+  analogWrite(ENA, velRecta);
+
+  Wire.begin();
+
+  if (huskylens.begin(Wire)) {
+    Serial.println("HuskyLens conectada");
+  } else {
+    Serial.println("Error de HuskyLens");
+  }
+}
+
+float leerDistancia(int trigPin, int echoPin) {
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+
+  digitalWrite(trigPin, LOW);
+
+  long duracion = pulseIn(echoPin, HIGH, 25000);
+
+  if (duracion == 0)
+    return 400.0;
+
+  return duracion * 0.034 / 2;
+}
+
+int detectarColor() {
+  if (!huskylens.request())
+    return 0;
+
+  if (!huskylens.available())
+    return 0;
+
+  HUSKYLENSResult resultado = huskylens.read();
+
+  if (resultado.ID == COLOR_ROJO)
+    return COLOR_ROJO;
+
+  if (resultado.ID == COLOR_VERDE)
+    return COLOR_VERDE;
+
+  return 0;
+}
+
+void irRecto() {
+  myServo.write(anguloRecto);
+  analogWrite(ENA, velRecta);
+}
+
+void girarIzquierda() {
+  myServo.write(anguloIzq);
+  analogWrite(ENA, velCurva);
+}
+
+void girarDerecha() {
+  myServo.write(anguloDer);
+  analogWrite(ENA, velCurva);
+}
+
+void detenerRobot() {
+  myServo.write(anguloRecto);
+  digitalWrite(IN3, LOW);
+  digitalWrite(IN4, LOW);
+  analogWrite(ENA, 0);
+}
+
+void loop() {
+  if (detenido) {
+    detenerRobot();
+    return;
+  }
+
+  int colorDetectado = detectarColor();
+
+  if (!giroPorColor) {
+    if (colorDetectado == COLOR_ROJO) {
+      Serial.println("Rojo -> girar derecha");
+
+      girarDerecha();
+
+      giroPorColor = true;
+      inicioGiroColor = millis();
+    }
+    else if (colorDetectado == COLOR_VERDE) {
+      Serial.println("Verde -> girar izquierda");
+
+      girarIzquierda();
+
+      giroPorColor = true;
+      inicioGiroColor = millis();
+    }
+  }
+
+  if (giroPorColor) {
+    if (colorDetectado == 0) {
+      Serial.println("Color perdido -> control normal");
+
+      giroPorColor = false;
+      irRecto();
+    }
+    else if (millis() - inicioGiroColor >= TIEMPO_MAX_GIRO) {
+      Serial.println("Tiempo maximo de giro");
+
+      giroPorColor = false;
+      irRecto();
+    }
+    else {
+      if (colorDetectado == COLOR_ROJO) {
+        girarDerecha();
+      }
+      else if (colorDetectado == COLOR_VERDE) {
+        girarIzquierda();
+      }
+    }
+
+    delay(50);
+    return;
+  }
+
+  der = leerDistancia(TRIG_DER, ECHO_DER);
+  izq = leerDistancia(TRIG_IZQ, ECHO_IZQ);
+
+  Serial.print("Der: ");
+  Serial.print(der);
+  Serial.print(" cm | Izq: ");
+  Serial.print(izq);
+  Serial.println(" cm");
+
+  bool abrioDer = der > UMBRAL_GIRO;
+  bool abrioIzq = izq > UMBRAL_GIRO;
+
+  bool girandoAhora = false;
+
+  if (abrioDer && !abrioIzq) {
+    girarDerecha();
+    girandoAhora = true;
+  }
+  else if (abrioIzq && !abrioDer) {
+    girarIzquierda();
+    girandoAhora = true;
+  }
+  else {
+    irRecto();
+    girandoAhora = false;
+  }
+
+  if (girandoAhora && !girandoAntes) {
+
+    if (!primerGiroIgnorado) {
+      primerGiroIgnorado = true;
+
+      Serial.println("Giro de arranque (no cuenta para el total)");
+    }
+    else {
+      contadorGiros++;
+
+      Serial.print("Giro detectado. Total: ");
+      Serial.println(contadorGiros);
+
+      if (contadorGiros >= girosMeta) {
+        detenido = true;
+      }
+    }
+  }
+
+  girandoAntes = girandoAhora;
+
+  delay(100);
+}
