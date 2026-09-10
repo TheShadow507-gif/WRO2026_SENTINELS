@@ -20,17 +20,17 @@ Servo myServo;
 
 HUSKYLENS huskylens;
 
-int velRecta = 220;
-int velCurva = 220;
+int velRecta = 235; //220 original
+int velCurva = 190; //220 original
 
-int anguloRecto = 90;
-int anguloIzq = 50;
-int anguloDer = 130;
+int anguloRecto = 90; 
+int anguloIzq = 40; //30 original  50 
+int anguloDer = 140; //130 original 
 
-float UMBRAL_GIRO = 55;
+float UMBRAL_GIRO = 50; //55
 
 int GIROS_POR_VUELTA = 4;
-int VUELTAS_META = 3;
+int VUELTAS_META = 8;
 
 int contadorGiros = 0;
 int girosMeta = GIROS_POR_VUELTA * VUELTAS_META;
@@ -45,8 +45,8 @@ unsigned long inicioGiroColor = 0;
 
 const unsigned long TIEMPO_MAX_GIRO = 1200;
 
-const int COLOR_ROJO = 1;
-const int COLOR_VERDE = 2;
+const int COLOR_ROJO = 2;
+const int COLOR_VERDE = 1;
 
 void setup() {
   Serial.begin(9600);
@@ -204,10 +204,12 @@ void loop() {
   if (abrioDer && !abrioIzq) {
     girarDerecha();
     girandoAhora = true;
+    delay(100);
   }
   else if (abrioIzq && !abrioDer) {
     girarIzquierda();
     girandoAhora = true;
+    delay(100);
   }
   else {
     irRecto();
